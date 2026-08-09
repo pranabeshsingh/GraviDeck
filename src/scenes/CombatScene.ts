@@ -18,33 +18,69 @@ export class CombatScene extends Phaser.Scene {
   public relicBar!: RelicBar;
   public hud!: HUD;
   public cardContainers: CardContainer[] = [];
-  
+  public droneSprites: Phaser.GameObjects.Arc[] = [];
+  public playerShipImage!: Phaser.GameObjects.Image;
+  public enemyShipImage!: Phaser.GameObjects.Image;
+
   public activeProbe: Probe | null = null;
   public probeImage: Phaser.GameObjects.Image | null = null;
   public isSimulating: boolean = false;
+  
+  // Aim locking state
   public currentAimAngle: number = -Math.PI / 4;
+  public isAimLocked: boolean = false;
+  public lockBadgeText!: Phaser.GameObjects.Text;
 
   constructor() {
     super('CombatScene');
   }
 
   create() {
-    this.cameras.main.setBackgroundColor('#090d16');
+    // 1. Background Nebula
+    const bg = this.add.image(640, 360, 'space_bg');
+    bg.setDisplaySize(1280, 720);
+    bg.setAlpha(0.65);
+
     this.createStarfield();
 
-    const mainPlanet = new GravityBody('planet1', GravityBodyType.PLANET, new Vector2D(640, 360), 6000, 40, 220);
+    // 2. Planets & Gravity Fields
+    const mainPlanet = new GravityBody('planet1', GravityBodyType.PLANET, new Vector2D(640, 360), 6500, 50, 240);
     this.bodies = [mainPlanet];
 
-    this.add.image(mainPlanet.position.x, mainPlanet.position.y, 'planet_blue');
+    const planetImg = this.add.image(mainPlanet.position.x, mainPlanet.position.y, 'planet_blue');
+    planetImg.setDisplaySize(100, 100);
 
     const ringGraphics = this.add.graphics();
-    ringGraphics.lineStyle(1, 0x6366f1, 0.4);
+    ringGraphics.lineStyle(2, 0x38bdf8, 0.35);
     ringGraphics.strokeCircle(mainPlanet.position.x, mainPlanet.position.y, mainPlanet.pullRadius);
 
-    this.add.text(20, 20, 'SECTOR GRID // GRAVITY FOUNDRY', {
-      fontSize: '16px',
-      color: '#38bdf8'
+    // 3. Ships
+    this.playerShipImage = this.add.image(this.sm.player.position.x, this.sm.player.position.y, 'player_ship');
+    this.playerShipImage.setDisplaySize(70, 70);
+
+    this.enemyShipImage = this.add.image(this.sm.enemy.position.x, this.sm.enemy.position.y, 'enemy_ship');
+    this.enemyShipImage.setDisplaySize(90, 90);
+
+    // 4. Enemy Point-Defense Drones
+    this.sm.enemy.drones.forEach(() => {
+      const drone = this.add.circle(0, 0, 8, 0xef4444);
+      drone.setStrokeStyle(2, 0xffffff);
+      this.droneSprites.push(drone);
     });
+
+    // 5. Title & Trajectory UI
+    this.add.text(20, 20, 'SECTOR GRID // TACTICAL GRAVITY FIELD', {
+      fontSize: '15px',
+      color: '#38bdf8',
+      fontStyle: 'bold'
+    });
+
+    this.lockBadgeText = this.add.text(640, 30, 'CLICK SPACE ARENA TO LOCK AIMING ANGLE', {
+      fontSize: '13px',
+      color: '#f59e0b',
+      backgroundColor: '#0f172a',
+      padding: { x: 10, y: 5 }
+    }).setOrigin(0.5);
 
     this.trajectoryRenderer = new TrajectoryRenderer(this);
     this.relicBar = new RelicBar(this, this.sm.relicManager);
@@ -52,30 +88,68 @@ export class CombatScene extends Phaser.Scene {
 
     this.renderCardHand();
 
-    // Fire Button
-    const fireBtn = this.add.text(1120, 650, 'LAUNCH PROBE', {
+    // 6. Launch Probe Button
+    const fireBtn = this.add.text(1150, 650, '🚀 LAUNCH PROBE', {
       fontSize: '16px',
       color: '#ffffff',
       backgroundColor: '#2563eb',
-      padding: { x: 16, y: 10 }
+      padding: { x: 18, y: 12 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    fireBtn.on('pointerdown', () => this.launchProbe());
+    fireBtn.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      this.launchProbe();
+    });
 
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (!this.isSimulating) {
+    // 7. Arena Click Aiming Lock Handler
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.isSimulating) return;
+      if (pointer.y > 540 || pointer.x > 1050) return; // Don't lock if clicking Card Dock or Launch button
+
+      this.isAimLocked = !this.isAimLocked;
+
+      if (this.isAimLocked) {
         this.currentAimAngle = Math.atan2(pointer.y - this.sm.player.position.y, pointer.x - this.sm.player.position.x);
-        this.trajectoryRenderer.renderTrajectory(this.sm.player.position, this.currentAimAngle, this.sm.player.launchPower, this.bodies);
+        this.lockBadgeText.setText('🔒 AIM ANGLE LOCKED! Click Launch Probe or click Arena to unlock').setColor('#10b981');
+      } else {
+        this.lockBadgeText.setText('CLICK SPACE ARENA TO LOCK AIMING ANGLE').setColor('#f59e0b');
+      }
+
+      this.updateTrajectoryPreview();
+    });
+
+    // 8. Mouse Pointer Motion Handler
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!this.isSimulating && !this.isAimLocked) {
+        this.currentAimAngle = Math.atan2(pointer.y - this.sm.player.position.y, pointer.x - this.sm.player.position.x);
+        this.updateTrajectoryPreview();
       }
     });
+  }
+
+  private updateTrajectoryPreview() {
+    this.playerShipImage.setRotation(this.currentAimAngle);
+    this.trajectoryRenderer.renderTrajectory(
+      this.sm.player.position,
+      this.currentAimAngle,
+      this.sm.player.launchPower,
+      this.bodies
+    );
   }
 
   update(_time: number, delta: number) {
     const dt = delta / 1000;
 
-    // Rotate enemy defense drones
+    // Update enemy defense drones visual positions
     this.sm.enemy.updateDrones(dt);
+    this.sm.enemy.drones.forEach((drone, idx) => {
+      if (this.droneSprites[idx]) {
+        const pos = drone.getAbsolutePosition(this.sm.enemy.position);
+        this.droneSprites[idx].setPosition(pos.x, pos.y);
+      }
+    });
 
+    // Real-Time Probe Physics Integration Loop
     if (this.isSimulating && this.activeProbe) {
       const hasHarness = this.sm.relicManager.hasRelic('event_horizon_harness');
       this.physicsEngine.step(this.activeProbe, this.bodies, [], dt, hasHarness);
@@ -90,8 +164,18 @@ export class CombatScene extends Phaser.Scene {
         return;
       }
 
+      // Check collision with Rotating Defense Drones
+      for (const drone of this.sm.enemy.drones) {
+        const dronePos = drone.getAbsolutePosition(this.sm.enemy.position);
+        if (this.activeProbe.position.dist(dronePos) <= 16) {
+          this.cameras.main.shake(150, 0.01);
+          this.endSimulation();
+          return;
+        }
+      }
+
       // Check collision with Enemy hull
-      if (this.activeProbe.position.dist(this.sm.enemy.position) <= 35) {
+      if (this.activeProbe.position.dist(this.sm.enemy.position) <= 45) {
         const hasAmplifier = this.sm.relicManager.hasRelic('graviton_amplifier');
         const damage = this.activeProbe.getCurrentDamage(hasAmplifier ? 8.0 : 4.0);
 
@@ -130,6 +214,9 @@ export class CombatScene extends Phaser.Scene {
 
   private endSimulation() {
     this.isSimulating = false;
+    this.isAimLocked = false;
+    this.lockBadgeText.setText('CLICK SPACE ARENA TO LOCK AIMING ANGLE').setColor('#f59e0b');
+
     if (this.probeImage) {
       this.probeImage.destroy();
       this.probeImage = null;
@@ -168,16 +255,20 @@ export class CombatScene extends Phaser.Scene {
       this.sm.deck.playCard(card.id);
 
       if (card.type === 'field') {
+        const isSingularity = card.id.includes('singularity');
         const newBody = new GravityBody(
           `spawn_${Date.now()}`,
-          card.id.includes('singularity') ? GravityBodyType.SINGULARITY : GravityBodyType.REPULSION_NODE,
+          isSingularity ? GravityBodyType.SINGULARITY : GravityBodyType.REPULSION_NODE,
           new Vector2D(dropX, dropY),
-          card.id.includes('singularity') ? 8000 : 4000,
-          25,
+          isSingularity ? 8000 : 4000,
+          30,
           180
         );
         this.bodies.push(newBody);
-        this.add.image(dropX, dropY, card.id.includes('singularity') ? 'black_hole' : 'planet_blue');
+
+        const imgKey = isSingularity ? 'black_hole' : 'planet_blue';
+        const img = this.add.image(dropX, dropY, imgKey);
+        img.setDisplaySize(60, 60);
       } else if (card.type === 'defense') {
         this.sm.player.addShields(15);
       }
