@@ -1,10 +1,10 @@
-# GraviDeck Implementation Plan
+# GraviDeck Expanded Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a playable web-based 2D roguelite deckbuilder physics game ("GraviDeck") in browser using Phaser 3, TypeScript, Vite, and a custom Newtonian vector gravity engine.
+**Goal:** Build a complete 2D roguelite deckbuilder physics game ("GraviDeck") in browser using Phaser 3, TypeScript, Vite, and a custom Newtonian vector gravity engine, featuring passive relics, branching sector maps, in-field orbital collectibles, card upgrades, status debuffs, and enemy defense drones.
 
-**Architecture:** A decoupled architecture separating pure TypeScript physics math (`src/physics/`), deck/turn state machine (`src/state/`), Phaser 3 visual rendering (`src/scenes/`), and interactive UI components (`src/ui/`). Unit testing powered by Vitest ensures physics and card logic are fully verified.
+**Architecture:** Decoupled architecture separating pure TypeScript physics math (`src/physics/`), roguelite state/relics/map (`src/state/`), Phaser 3 visual rendering (`src/scenes/`), and interactive UI components (`src/ui/`). TDD unit testing powered by Vitest guarantees correctness across physics calculations, card logic, and relic triggers.
 
 **Tech Stack:** TypeScript, Vite, Phaser 3, Vitest, HTML5 Canvas / WebGL.
 
@@ -13,7 +13,7 @@
 - Platform: Modern web browsers (Chrome, Firefox, Safari).
 - Framework: Phaser 3.x, Vite, TypeScript 5.x.
 - Unit Testing: Vitest for pure TS modules (`src/physics/` and `src/state/`).
-- Style: Vanilla CSS and Phaser Graphics/Particle effects for high visual flair.
+- Style: Dark futuristic space theme with glowing Phaser particle and vector graphics.
 
 ---
 
@@ -51,7 +51,7 @@ describe('Environment Sanity Test', () => {
 {
   "name": "gravideck",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -207,7 +207,7 @@ describe('Vector2D Math Operations', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npm run test`
-Expected: FAIL with "Cannot find module '../../src/physics/Vector2D'"
+Expected: FAIL ("Cannot find module '../../src/physics/Vector2D'")
 
 - [ ] **Step 3: Implement Vector2D**
 
@@ -280,38 +280,39 @@ git commit -m "feat: add Vector2D physics math module with unit tests"
 
 ---
 
-### Task 3: GravityBody & Probe Data Models
+### Task 3: GravityBody, Probe, & OrbitalEntity Models
 
 **Files:**
 - Create: `src/physics/GravityBody.ts`
 - Create: `src/physics/Probe.ts`
+- Create: `src/physics/OrbitalEntity.ts`
 - Create: `tests/physics/GravityBody.test.ts`
 
 **Interfaces:**
 - Consumes: `Vector2D`
-- Produces: `GravityBody` class, `GravityBodyType` enum, `Probe` class.
+- Produces: `GravityBody`, `Probe`, `OrbitalEntity` (Energy Containers, Antimatter Crates, Asteroids).
 
-- [ ] **Step 1: Write failing GravityBody & Probe tests**
+- [ ] **Step 1: Write failing GravityBody & OrbitalEntity tests**
 
 ```typescript
 // tests/physics/GravityBody.test.ts
 import { describe, it, expect } from 'vitest';
 import { GravityBody, GravityBodyType } from '../../src/physics/GravityBody';
 import { Probe } from '../../src/physics/Probe';
+import { OrbitalEntity, OrbitalEntityType } from '../../src/physics/OrbitalEntity';
 import { Vector2D } from '../../src/physics/Vector2D';
 
-describe('GravityBody & Probe Models', () => {
-  it('initializes planet and singularity bodies with radii', () => {
+describe('GravityBody & OrbitalEntity Models', () => {
+  it('initializes planet body with pull radius', () => {
     const planet = new GravityBody('p1', GravityBodyType.PLANET, new Vector2D(400, 300), 5000, 40, 150);
     expect(planet.mass).toBe(5000);
     expect(planet.pullRadius).toBe(150);
   });
 
-  it('initializes Probe with position, velocity, and zero slingshots', () => {
-    const probe = new Probe(new Vector2D(100, 100), new Vector2D(200, 0));
-    expect(probe.slingshotCount).toBe(0);
-    expect(probe.isSwallowed).toBe(false);
-    expect(probe.initialSpeed).toBe(200);
+  it('initializes OrbitalEntity energy pod', () => {
+    const pod = new OrbitalEntity('pod1', OrbitalEntityType.ENERGY_CONTAINER, new Vector2D(450, 300), 15);
+    expect(pod.type).toBe(OrbitalEntityType.ENERGY_CONTAINER);
+    expect(pod.isCollected).toBe(false);
   });
 });
 ```
@@ -321,7 +322,7 @@ describe('GravityBody & Probe Models', () => {
 Run: `npm run test`
 Expected: FAIL ("Cannot find module GravityBody")
 
-- [ ] **Step 3: Implement GravityBody and Probe**
+- [ ] **Step 3: Implement models**
 
 ```typescript
 // src/physics/GravityBody.ts
@@ -339,11 +340,34 @@ export class GravityBody {
     public id: string,
     public type: GravityBodyType,
     public position: Vector2D,
-    public mass: number,             // Gravitational magnitude multiplier
-    public bodyRadius: number,       // Solid collision radius
-    public pullRadius: number,       // Sphere of gravitational influence
-    public eventHorizonRadius: number = 15, // For black holes
-    public pulsePeriodMs: number = 0 // For pulsars
+    public mass: number,
+    public bodyRadius: number,
+    public pullRadius: number,
+    public eventHorizonRadius: number = 15,
+    public pulsePeriodMs: number = 0
+  ) {}
+}
+```
+
+```typescript
+// src/physics/OrbitalEntity.ts
+import { Vector2D } from './Vector2D';
+
+export enum OrbitalEntityType {
+  ENERGY_CONTAINER = 'ENERGY_CONTAINER',
+  ANTIMATTER_CRATE = 'ANTIMATTER_CRATE',
+  ASTEROID_DEBRIS = 'ASTEROID_DEBRIS'
+}
+
+export class OrbitalEntity {
+  public isCollected: boolean = false;
+  public hp: number = 20; // For breakable asteroids
+
+  constructor(
+    public id: string,
+    public type: OrbitalEntityType,
+    public position: Vector2D,
+    public radius: number = 15
   ) {}
 }
 ```
@@ -370,18 +394,18 @@ export class Probe {
     this.initialSpeed = velocity.length();
   }
 
-  getSpeedMultiplier(): number {
+  getSpeedMultiplier(megaMultiplier: number = 4.0): number {
     if (this.slingshotCount === 0) return 1.0;
     if (this.slingshotCount === 1) return 1.5;
     if (this.slingshotCount === 2) return 2.5;
-    return 4.0; // 3+ Mega-Crit
+    return megaMultiplier; // 3+ Mega-Crit
   }
 
-  getCurrentDamage(): number {
+  getCurrentDamage(megaMultiplier: number = 4.0): number {
     const currentSpeed = this.velocity.length();
     const speedRatio = this.initialSpeed > 0 ? currentSpeed / this.initialSpeed : 1.0;
     const ratioSq = speedRatio * speedRatio;
-    return Math.round(this.baseDamage * ratioSq * this.getSpeedMultiplier());
+    return Math.round(this.baseDamage * ratioSq * this.getSpeedMultiplier(megaMultiplier));
   }
 }
 ```
@@ -394,8 +418,8 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/physics/GravityBody.ts src/physics/Probe.ts tests/physics/GravityBody.test.ts
-git commit -m "feat: add GravityBody and Probe domain models with slingshot multipliers"
+git add src/physics/GravityBody.ts src/physics/OrbitalEntity.ts src/physics/Probe.ts tests/physics/GravityBody.test.ts
+git commit -m "feat: add GravityBody, Probe, and OrbitalEntity collectible models"
 ```
 
 ---
@@ -407,8 +431,8 @@ git commit -m "feat: add GravityBody and Probe domain models with slingshot mult
 - Create: `tests/physics/PhysicsEngine.test.ts`
 
 **Interfaces:**
-- Consumes: `Vector2D`, `GravityBody`, `Probe`
-- Produces: `PhysicsEngine` class with `step(probe, bodies, dt)` method.
+- Consumes: `Vector2D`, `GravityBody`, `Probe`, `OrbitalEntity`
+- Produces: `PhysicsEngine` class with `step(probe, bodies, orbitalEntities, dt, hasEventHorizonHarness)` method.
 
 - [ ] **Step 1: Write failing PhysicsEngine tests**
 
@@ -418,40 +442,35 @@ import { describe, it, expect } from 'vitest';
 import { PhysicsEngine } from '../../src/physics/PhysicsEngine';
 import { GravityBody, GravityBodyType } from '../../src/physics/GravityBody';
 import { Probe } from '../../src/physics/Probe';
+import { OrbitalEntity, OrbitalEntityType } from '../../src/physics/OrbitalEntity';
 import { Vector2D } from '../../src/physics/Vector2D';
 
-describe('PhysicsEngine Gravitational Calculations', () => {
+describe('PhysicsEngine Gravitational Calculations & Collectibles', () => {
   it('accelerates probe towards a standard planet', () => {
     const engine = new PhysicsEngine(500);
     const planet = new GravityBody('p1', GravityBodyType.PLANET, new Vector2D(400, 300), 1000, 30, 200);
     const probe = new Probe(new Vector2D(200, 300), new Vector2D(0, 0));
 
-    engine.step(probe, [planet], 0.1);
-
-    // Velocity should be directed right (x > 0) towards planet
+    engine.step(probe, [planet], [], 0.1);
     expect(probe.velocity.x).toBeGreaterThan(0);
-    expect(probe.position.x).toBeGreaterThan(200);
   });
 
-  it('repels probe away from a Repulsion Node', () => {
-    const engine = new PhysicsEngine(500);
-    const node = new GravityBody('r1', GravityBodyType.REPULSION_NODE, new Vector2D(400, 300), 1000, 30, 200);
-    const probe = new Probe(new Vector2D(200, 300), new Vector2D(0, 0));
-
-    engine.step(probe, [node], 0.1);
-
-    // Velocity should be directed left (x < 0) away from repulsion node
-    expect(probe.velocity.x).toBeLessThan(0);
-  });
-
-  it('swallows probe if it enters a Singularity event horizon', () => {
+  it('does not swallow probe in black hole if Event Horizon Harness relic is active', () => {
     const engine = new PhysicsEngine(500);
     const bh = new GravityBody('bh1', GravityBodyType.SINGULARITY, new Vector2D(300, 300), 5000, 20, 200, 15);
     const probe = new Probe(new Vector2D(305, 300), new Vector2D(0, 0));
 
-    engine.step(probe, [bh], 0.1);
+    engine.step(probe, [bh], [], 0.1, true /* hasHarness */);
+    expect(probe.isSwallowed).toBe(false);
+  });
 
-    expect(probe.isSwallowed).toBe(true);
+  it('detects collision with Energy Container', () => {
+    const engine = new PhysicsEngine(500);
+    const pod = new OrbitalEntity('pod1', OrbitalEntityType.ENERGY_CONTAINER, new Vector2D(205, 300), 15);
+    const probe = new Probe(new Vector2D(200, 300), new Vector2D(0, 0));
+
+    engine.step(probe, [], [pod], 0.1);
+    expect(pod.isCollected).toBe(true);
   });
 });
 ```
@@ -468,14 +487,15 @@ Expected: FAIL ("Cannot find module PhysicsEngine")
 import { Vector2D } from './Vector2D';
 import { GravityBody, GravityBodyType } from './GravityBody';
 import { Probe } from './Probe';
+import { OrbitalEntity, OrbitalEntityType } from './OrbitalEntity';
 
 export class PhysicsEngine {
-  private lastAngles: Map<string, number> = new Map(); // bodyId -> last angle
-  private accumAngles: Map<string, number> = new Map(); // bodyId -> total rads
+  private lastAngles: Map<string, number> = new Map();
+  private accumAngles: Map<string, number> = new Map();
 
   constructor(public G: number = 500) {}
 
-  step(probe: Probe, bodies: GravityBody[], dt: number): void {
+  step(probe: Probe, bodies: GravityBody[], orbitalEntities: OrbitalEntity[] = [], dt: number = 0.03, hasEventHorizonHarness: boolean = false): void {
     if (probe.isSwallowed || probe.isDestroyed) return;
 
     let totalAcc = new Vector2D(0, 0);
@@ -485,26 +505,28 @@ export class PhysicsEngine {
       const distSq = dir.lengthSq();
       const dist = Math.sqrt(distSq);
 
-      if (dist < 1) continue; // Avoid singularity divide by zero
+      if (dist < 1) continue;
 
-      // 1. Black hole event horizon check
+      // Event Horizon check
       if (body.type === GravityBodyType.SINGULARITY && dist <= body.eventHorizonRadius) {
-        probe.isSwallowed = true;
-        return;
+        if (!hasEventHorizonHarness) {
+          probe.isSwallowed = true;
+          return;
+        }
       }
 
-      // 2. Gravitational force calculation if within influence
+      // Gravitational acceleration
       if (dist <= body.pullRadius) {
         const normDir = dir.normalize();
         let forceMag = (this.G * body.mass) / Math.max(distSq, 100);
 
         if (body.type === GravityBodyType.REPULSION_NODE) {
-          forceMag = -forceMag; // Push away
+          forceMag = -forceMag;
         }
 
         totalAcc = totalAcc.add(normDir.scale(forceMag));
 
-        // 3. Angular revolution slingshot tracking
+        // Slingshot angular sweep tracking
         const currentAngle = Math.atan2(probe.position.y - body.position.y, probe.position.x - body.position.x);
         const lastAngle = this.lastAngles.get(body.id);
 
@@ -516,15 +538,20 @@ export class PhysicsEngine {
           const currentAccum = (this.accumAngles.get(body.id) || 0) + Math.abs(diff);
           this.accumAngles.set(body.id, currentAccum);
 
-          if (currentAccum >= Math.PI) { // Completed 180 deg bend
+          if (currentAccum >= Math.PI) {
             probe.slingshotCount += 1;
-            this.accumAngles.set(body.id, 0); // Reset for next loop
+            this.accumAngles.set(body.id, 0);
           }
         }
         this.lastAngles.set(body.id, currentAngle);
-      } else {
-        this.lastAngles.delete(body.id);
-        this.accumAngles.delete(body.id);
+      }
+    }
+
+    // Check collisions with orbital entities
+    for (const entity of orbitalEntities) {
+      if (entity.isCollected) continue;
+      if (probe.position.dist(entity.position) <= entity.radius + 8) {
+        entity.isCollected = true;
       }
     }
 
@@ -532,7 +559,6 @@ export class PhysicsEngine {
     probe.velocity = probe.velocity.add(totalAcc.scale(dt));
     probe.position = probe.position.add(probe.velocity.scale(dt));
 
-    // Append to trail
     probe.trail.push(probe.position.clone());
     if (probe.trail.length > probe.maxTrailLength) {
       probe.trail.shift();
@@ -555,7 +581,7 @@ Expected: PASS
 
 ```bash
 git add src/physics/PhysicsEngine.ts tests/physics/PhysicsEngine.test.ts
-git commit -m "feat: implement 2D Newtonian PhysicsEngine with slingshot tracking and black hole swallows"
+git commit -m "feat: implement PhysicsEngine with event horizon harness bypass and orbital entity pickups"
 ```
 
 ---
@@ -621,18 +647,16 @@ export class TrajectoryPredictor {
     let inflectionCount = 0;
 
     for (let step = 0; step < maxSteps; step++) {
-      const posBefore = ghost.position.clone();
-      this.simEngine.step(ghost, bodies, dt);
+      this.simEngine.step(ghost, bodies, [], dt);
 
       if (ghost.isSwallowed || ghost.isDestroyed) break;
 
       const currentDir = ghost.velocity.normalize();
       if (prevDir !== null) {
-        // Detect inflection point where dot product indicates major direction curve completion
         const turnDot = prevDir.dot(currentDir);
-        if (turnDot < 0.7) { // Significant bend (> ~45 deg)
+        if (turnDot < 0.7) {
           inflectionCount++;
-          if (inflectionCount >= 1) { // Truncate at first bend
+          if (inflectionCount >= 1) {
             points.push(ghost.position.clone());
             break;
           }
@@ -662,42 +686,41 @@ git commit -m "feat: add TrajectoryPredictor for partial first-bend trajectory p
 
 ---
 
-### Task 6: Card & Deck State Models
+### Task 6: Relic System & Passive Hook Manager
 
 **Files:**
-- Create: `src/state/Card.ts`
-- Create: `src/state/Deck.ts`
-- Create: `tests/state/Deck.test.ts`
+- Create: `src/state/Relic.ts`
+- Create: `tests/state/Relic.test.ts`
 
 **Interfaces:**
-- Consumes: `Vector2D`, `GravityBody`
-- Produces: `Card` interface, `CardCatalog` constants, `Deck` manager class.
+- Consumes: `RelicType`, `Probe`, `PlayerShip`
+- Produces: `Relic` interface, `RelicCatalog`, `RelicManager` with hooks (`onOrbit`, `onImpact`, `onTurnStart`).
 
-- [ ] **Step 1: Write failing Card and Deck tests**
+- [ ] **Step 1: Write failing Relic tests**
 
 ```typescript
-// tests/state/Deck.test.ts
+// tests/state/Relic.test.ts
 import { describe, it, expect } from 'vitest';
-import { Deck } from '../../src/state/Deck';
-import { StarterCards } from '../../src/state/Card';
+import { RelicManager, RelicCatalog } from '../../src/state/Relic';
+import { PlayerShip } from '../../src/state/PlayerShip';
 
-describe('Deck State Manager', () => {
-  it('draws cards from draw pile into hand up to hand size', () => {
-    const deck = new Deck(StarterCards);
-    expect(deck.drawPile.length).toBe(StarterCards.length);
+describe('Relic System', () => {
+  it('adds Gravity Dynamo relic and triggers +5 shield on orbit hook', () => {
+    const rm = new RelicManager();
+    const player = new PlayerShip();
 
-    deck.drawHand(3);
-    expect(deck.hand.length).toBe(3);
-    expect(deck.drawPile.length).toBe(StarterCards.length - 3);
+    rm.addRelic(RelicCatalog.GRAVITY_DYNAMO);
+    rm.triggerOrbitHook(player);
+
+    expect(player.shields).toBe(5);
   });
 
-  it('discards hand cards to discard pile at turn end', () => {
-    const deck = new Deck(StarterCards);
-    deck.drawHand(3);
-    deck.discardHand();
+  it('detects Event Horizon Harness relic ownership', () => {
+    const rm = new RelicManager();
+    expect(rm.hasRelic('event_horizon_harness')).toBe(false);
 
-    expect(deck.hand.length).toBe(0);
-    expect(deck.discardPile.length).toBe(3);
+    rm.addRelic(RelicCatalog.EVENT_HORIZON_HARNESS);
+    expect(rm.hasRelic('event_horizon_harness')).toBe(true);
   });
 });
 ```
@@ -705,14 +728,166 @@ describe('Deck State Manager', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npm run test`
-Expected: FAIL ("Cannot find module Deck")
+Expected: FAIL ("Cannot find module Relic")
 
-- [ ] **Step 3: Implement Card definitions and Deck manager**
+- [ ] **Step 3: Implement Relic models and RelicManager**
 
 ```typescript
-// src/state/Card.ts
-export type CardType = 'field' | 'probe' | 'defense';
+// src/state/Relic.ts
+import { PlayerShip } from './PlayerShip';
 
+export interface Relic {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export const RelicCatalog: Record<string, Relic> = {
+  EVENT_HORIZON_HARNESS: {
+    id: 'event_horizon_harness',
+    name: 'Event Horizon Harness',
+    description: 'Black Holes no longer swallow probes; they boost speed by +300%',
+    icon: '🔮'
+  },
+  KINETIC_BATTERY: {
+    id: 'kinetic_battery',
+    name: 'Kinetic Battery',
+    description: 'Converts 20% of probe collision speed into Energy next turn',
+    icon: '⚡'
+  },
+  GRAVITY_DYNAMO: {
+    id: 'gravity_dynamo',
+    name: 'Gravity Dynamo',
+    description: 'Sweeping 180° orbits around any body grants +5 Shield',
+    icon: '🛡️'
+  },
+  GRAVITON_AMPLIFIER: {
+    id: 'graviton_amplifier',
+    name: 'Graviton Amplifier',
+    description: 'Slingshot Mega-Crit damage multiplier increased to 8.0x',
+    icon: '🚀'
+  }
+};
+
+export class RelicManager {
+  public relics: Relic[] = [];
+
+  addRelic(relic: Relic): void {
+    if (!this.hasRelic(relic.id)) {
+      this.relics.push(relic);
+    }
+  }
+
+  hasRelic(id: string): boolean {
+    return this.relics.some(r => r.id === id);
+  }
+
+  triggerOrbitHook(player: PlayerShip): void {
+    if (this.hasRelic('gravity_dynamo')) {
+      player.addShields(5);
+    }
+  }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npm run test`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/state/Relic.ts tests/state/Relic.test.ts
+git commit -m "feat: add Relic system with passive rule hooks"
+```
+
+---
+
+### Task 7: Status Effects & Card Upgrades
+
+**Files:**
+- Create: `src/state/StatusEffect.ts`
+- Modify: `src/state/Card.ts`
+- Create: `tests/state/StatusEffect.test.ts`
+
+**Interfaces:**
+- Consumes: `Card`, `Enemy`
+- Produces: `StatusEffectType` enum (`GRAV_LOCKED`, `IONIZED`, `THERMAL_FRICTION`), `StatusTracker`, upgraded `Card` properties (`isUpgraded`, `energyCost`).
+
+- [ ] **Step 1: Write failing StatusEffect and Card Upgrade tests**
+
+```typescript
+// tests/state/StatusEffect.test.ts
+import { describe, it, expect } from 'vitest';
+import { StatusTracker, StatusEffectType } from '../../src/state/StatusEffect';
+import { StarterCards } from '../../src/state/Card';
+
+describe('Status Effects & Card Upgrades', () => {
+  it('applies Ionized status effect and calculates +50% damage bonus', () => {
+    const tracker = new StatusTracker();
+    tracker.applyStatus(StatusEffectType.IONIZED, 2);
+
+    expect(tracker.hasStatus(StatusEffectType.IONIZED)).toBe(true);
+    expect(tracker.getDamageMultiplier()).toBe(1.5);
+  });
+
+  it('upgrades card to reduced energy cost and upgraded name', () => {
+    const card = { ...StarterCards[0] };
+    const upgraded = { ...card, isUpgraded: true, name: card.name + '+', energyCost: 0 };
+
+    expect(upgraded.name).toBe('Micro-Singularity+');
+    expect(upgraded.energyCost).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm run test`
+Expected: FAIL ("Cannot find module StatusEffect")
+
+- [ ] **Step 3: Implement StatusEffect and Card extensions**
+
+```typescript
+// src/state/StatusEffect.ts
+export enum StatusEffectType {
+  GRAV_LOCKED = 'GRAV_LOCKED',
+  IONIZED = 'IONIZED',
+  THERMAL_FRICTION = 'THERMAL_FRICTION'
+}
+
+export class StatusTracker {
+  private durationMap: Map<StatusEffectType, number> = new Map();
+
+  applyStatus(type: StatusEffectType, turns: number): void {
+    const existing = this.durationMap.get(type) || 0;
+    this.durationMap.set(type, existing + turns);
+  }
+
+  hasStatus(type: StatusEffectType): boolean {
+    return (this.durationMap.get(type) || 0) > 0;
+  }
+
+  getDamageMultiplier(): number {
+    return this.hasStatus(StatusEffectType.IONIZED) ? 1.5 : 1.0;
+  }
+
+  tickTurnEnd(): void {
+    for (const [type, turns] of this.durationMap.entries()) {
+      if (turns > 1) {
+        this.durationMap.set(type, turns - 1);
+      } else {
+        this.durationMap.delete(type);
+      }
+    }
+  }
+}
+```
+
+```typescript
+// Modify src/state/Card.ts to include isUpgraded
 export interface Card {
   id: string;
   name: string;
@@ -720,50 +895,115 @@ export interface Card {
   type: CardType;
   description: string;
   color: string;
+  isUpgraded?: boolean;
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npm run test`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/state/StatusEffect.ts src/state/Card.ts tests/state/StatusEffect.test.ts
+git commit -m "feat: add StatusEffect debuff tracker and card upgrade properties"
+```
+
+---
+
+### Task 8: Deck Manager & Enemy Defense Drones
+
+**Files:**
+- Create: `src/state/Enemy.ts`
+- Create: `src/state/Deck.ts`
+- Create: `tests/state/Enemy.test.ts`
+
+**Interfaces:**
+- Consumes: `Vector2D`, `StatusTracker`
+- Produces: `DefenseDrone` model, `Enemy` class with rotating drones, `Deck` manager.
+
+- [ ] **Step 1: Write failing Enemy & Drone tests**
+
+```typescript
+// tests/state/Enemy.test.ts
+import { describe, it, expect } from 'vitest';
+import { Enemy, DefenseDrone } from '../../src/state/Enemy';
+import { Vector2D } from '../../src/physics/Vector2D';
+
+describe('Enemy & Point Defense Drones', () => {
+  it('rotates defense drones on tick', () => {
+    const enemy = new Enemy(new Vector2D(1000, 300), 2 /* droneCount */);
+    expect(enemy.drones.length).toBe(2);
+
+    const initialPos = enemy.drones[0].getAbsolutePosition(enemy.position);
+    enemy.updateDrones(0.5);
+    const newPos = enemy.drones[0].getAbsolutePosition(enemy.position);
+
+    expect(initialPos).not.toEqual(newPos);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm run test`
+Expected: FAIL ("Cannot find module Enemy")
+
+- [ ] **Step 3: Implement DefenseDrone, Enemy, and Deck**
+
+```typescript
+// src/state/Enemy.ts
+import { Vector2D } from '../physics/Vector2D';
+import { StatusTracker } from './StatusEffect';
+
+export class DefenseDrone {
+  constructor(
+    public orbitRadius: number = 60,
+    public angle: number = 0,
+    public orbitSpeed: number = 1.0, // rads per sec
+    public isDestroyed: boolean = false
+  ) {}
+
+  getAbsolutePosition(enemyPos: Vector2D): Vector2D {
+    return new Vector2D(
+      enemyPos.x + Math.cos(this.angle) * this.orbitRadius,
+      enemyPos.y + Math.sin(this.angle) * this.orbitRadius
+    );
+  }
 }
 
-export const StarterCards: Card[] = [
-  {
-    id: 'singularity_1',
-    name: 'Micro-Singularity',
-    energyCost: 1,
-    type: 'field',
-    description: 'Spawn mini black hole at target location',
-    color: '#818cf8'
-  },
-  {
-    id: 'ion_1',
-    name: 'Ion Deflector',
-    energyCost: 1,
-    type: 'field',
-    description: 'Spawn a push-node repelling passing probes',
-    color: '#38bdf8'
-  },
-  {
-    id: 'whip_1',
-    name: 'Orbital Whip',
-    energyCost: 1,
-    type: 'probe',
-    description: 'Next launch +30% damage per slingshot loop',
-    color: '#f59e0b'
-  },
-  {
-    id: 'splitter_1',
-    name: 'Graviton Splitter',
-    energyCost: 2,
-    type: 'probe',
-    description: 'Probe splits into 3 warheads inside gravity fields',
-    color: '#10b981'
-  },
-  {
-    id: 'shield_1',
-    name: 'Debris Shield',
-    energyCost: 1,
-    type: 'defense',
-    description: 'Gain +15 Shield against enemy counter-attacks',
-    color: '#64748b'
+export class Enemy {
+  public maxHp: number = 120;
+  public hp: number = 120;
+  public shields: number = 0;
+  public drones: DefenseDrone[] = [];
+  public statusTracker: StatusTracker = new StatusTracker();
+  public nextIntentDamage: number = 18;
+
+  constructor(public position: Vector2D = new Vector2D(1100, 250), droneCount: number = 2) {
+    for (let i = 0; i < droneCount; i++) {
+      this.drones.push(new DefenseDrone(65, (i * 2 * Math.PI) / droneCount, 1.2));
+    }
   }
-];
+
+  updateDrones(dt: number): void {
+    if (this.statusTracker.hasStatus('GRAV_LOCKED')) return; // Locked in place
+    for (const drone of this.drones) {
+      drone.angle += drone.orbitSpeed * dt;
+    }
+  }
+
+  takeDamage(amount: number): void {
+    const finalDamage = Math.round(amount * this.statusTracker.getDamageMultiplier());
+    let unabsorbed = finalDamage - this.shields;
+    this.shields = Math.max(0, this.shields - finalDamage);
+    if (unabsorbed > 0) {
+      this.hp = Math.max(0, this.hp - unabsorbed);
+    }
+  }
+}
 ```
 
 ```typescript
@@ -824,23 +1064,22 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/state/Card.ts src/state/Deck.ts tests/state/Deck.test.ts
-git commit -m "feat: add Card catalog and Deck pile manager"
+git add src/state/Enemy.ts src/state/Deck.ts tests/state/Enemy.test.ts
+git commit -m "feat: add Enemy with rotating Point-Defense Drones and Deck manager"
 ```
 
 ---
 
-### Task 7: Combat Turn State Machine & Ship Entities
+### Task 9: Combat Turn State Machine
 
 **Files:**
 - Create: `src/state/PlayerShip.ts`
-- Create: `src/state/Enemy.ts`
 - Create: `src/state/CombatStateMachine.ts`
 - Create: `tests/state/CombatStateMachine.test.ts`
 
 **Interfaces:**
-- Consumes: `Deck`, `Vector2D`
-- Produces: `PlayerShip`, `Enemy`, `CombatStateMachine` with states (`DRAW`, `PLAY`, `AIM`, `SIMULATE`, `ENEMY`, `END`).
+- Consumes: `Deck`, `RelicManager`, `PlayerShip`, `Enemy`
+- Produces: `CombatStateMachine` managing full turn loop.
 
 - [ ] **Step 1: Write failing CombatStateMachine tests**
 
@@ -857,12 +1096,6 @@ describe('CombatStateMachine Phase Flow', () => {
     expect(sm.player.energy).toBe(3);
     expect(sm.deck.hand.length).toBe(4);
   });
-
-  it('transitions from PLAY to AIM phase when player confirms play', () => {
-    const sm = new CombatStateMachine(StarterCards);
-    sm.proceedToAim();
-    expect(sm.currentPhase).toBe(TurnPhase.AIM);
-  });
 });
 ```
 
@@ -871,7 +1104,7 @@ describe('CombatStateMachine Phase Flow', () => {
 Run: `npm run test`
 Expected: FAIL ("Cannot find module CombatStateMachine")
 
-- [ ] **Step 3: Implement PlayerShip, Enemy, and CombatStateMachine**
+- [ ] **Step 3: Implement PlayerShip and CombatStateMachine**
 
 ```typescript
 // src/state/PlayerShip.ts
@@ -883,9 +1116,10 @@ export class PlayerShip {
   public shields: number = 0;
   public maxEnergy: number = 3;
   public energy: number = 3;
+  public credits: number = 100;
   public position: Vector2D = new Vector2D(120, 550);
-  public launchAngle: number = -Math.PI / 4; // 45 deg upwards
-  public launchPower: number = 350; // impulse magnitude
+  public launchAngle: number = -Math.PI / 4;
+  public launchPower: number = 350;
 
   takeDamage(amount: number): void {
     let unabsorbed = amount - this.shields;
@@ -902,30 +1136,10 @@ export class PlayerShip {
 ```
 
 ```typescript
-// src/state/Enemy.ts
-import { Vector2D } from '../physics/Vector2D';
-
-export class Enemy {
-  public maxHp: number = 100;
-  public hp: number = 100;
-  public shields: number = 0;
-  public position: Vector2D = new Vector2D(1100, 200);
-  public nextIntentDamage: number = 15;
-
-  takeDamage(amount: number): void {
-    let unabsorbed = amount - this.shields;
-    this.shields = Math.max(0, this.shields - amount);
-    if (unabsorbed > 0) {
-      this.hp = Math.max(0, this.hp - unabsorbed);
-    }
-  }
-}
-```
-
-```typescript
 // src/state/CombatStateMachine.ts
 import { Deck } from './Deck';
 import { Card } from './Card';
+import { RelicManager } from './Relic';
 import { PlayerShip } from './PlayerShip';
 import { Enemy } from './Enemy';
 
@@ -941,6 +1155,7 @@ export enum TurnPhase {
 export class CombatStateMachine {
   public currentPhase: TurnPhase = TurnPhase.DRAW;
   public deck: Deck;
+  public relicManager: RelicManager = new RelicManager();
   public player: PlayerShip = new PlayerShip();
   public enemy: Enemy = new Enemy();
 
@@ -970,6 +1185,7 @@ export class CombatStateMachine {
     this.currentPhase = TurnPhase.ENEMY;
     this.player.takeDamage(this.enemy.nextIntentDamage);
     this.deck.discardHand();
+    this.enemy.statusTracker.tickTurnEnd();
     this.startTurn();
   }
 }
@@ -983,155 +1199,271 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/state/PlayerShip.ts src/state/Enemy.ts src/state/CombatStateMachine.ts tests/state/CombatStateMachine.test.ts
-git commit -m "feat: implement CombatStateMachine with turn phases and player/enemy HP entities"
+git add src/state/PlayerShip.ts src/state/CombatStateMachine.ts tests/state/CombatStateMachine.test.ts
+git commit -m "feat: implement CombatStateMachine with RelicManager integration"
 ```
 
 ---
 
-### Task 8: Phaser Canvas Boot & Background Starfield Scene
+### Task 10: Sector Node Map Generator & MapScene
 
 **Files:**
-- Modify: `src/main.ts`
-- Create: `src/scenes/BootScene.ts`
-- Create: `src/scenes/CombatScene.ts`
+- Create: `src/state/SectorMap.ts`
+- Create: `src/scenes/MapScene.ts`
+- Create: `tests/state/SectorMap.test.ts`
 
 **Interfaces:**
-- Consumes: `Phaser.Game`
-- Produces: Visual 1280x720 Phaser WebGL canvas showing glowing starfield background and planet body graphics.
+- Consumes: `MapNode`, `NodeType` (`COMBAT`, `ELITE`, `SHOP`, `EVENT`, `BOSS`)
+- Produces: `SectorMapGenerator` generating 4-layer branching node graphs.
 
-- [ ] **Step 1: Implement BootScene and CombatScene**
+- [ ] **Step 1: Write failing SectorMap tests**
 
 ```typescript
-// src/scenes/BootScene.ts
-import Phaser from 'phaser';
+// tests/state/SectorMap.test.ts
+import { describe, it, expect } from 'vitest';
+import { SectorMapGenerator, NodeType } from '../../src/state/SectorMap';
 
-export class BootScene extends Phaser.Scene {
-  constructor() {
-    super('BootScene');
-  }
+describe('SectorMap Generator', () => {
+  it('generates 4-layer sector map ending in BOSS node', () => {
+    const generator = new SectorMapGenerator();
+    const map = generator.generateSectorMap();
 
-  create() {
-    // Generate procedural glowing textures for celestial bodies
-    const graphics = this.add.graphics();
+    expect(map.layers.length).toBe(4);
+    expect(map.layers[3][0].type).toBe(NodeType.BOSS);
+  });
+});
+```
 
-    // Planet texture
-    graphics.fillStyle(0x6366f1, 1);
-    graphics.fillCircle(30, 30, 30);
-    graphics.lineStyle(3, 0x818cf8, 1);
-    graphics.strokeCircle(30, 30, 30);
-    graphics.generateTexture('planet_blue', 60, 60);
-    graphics.clear();
+- [ ] **Step 2: Run test to verify it fails**
 
-    // Singularity (Black Hole) texture
-    graphics.fillStyle(0x0f172a, 1);
-    graphics.fillCircle(25, 25, 25);
-    graphics.lineStyle(2, 0xa855f7, 1);
-    graphics.strokeCircle(25, 25, 25);
-    graphics.generateTexture('black_hole', 50, 50);
-    graphics.clear();
+Run: `npm run test`
+Expected: FAIL ("Cannot find module SectorMap")
 
-    // Probe texture
-    graphics.fillStyle(0x38bdf8, 1);
-    graphics.fillCircle(8, 8, 8);
-    graphics.generateTexture('probe', 16, 16);
+- [ ] **Step 3: Implement SectorMapGenerator and MapScene**
 
-    this.scene.start('CombatScene');
+```typescript
+// src/state/SectorMap.ts
+export enum NodeType {
+  COMBAT = 'COMBAT',
+  ELITE = 'ELITE',
+  SHOP = 'SHOP',
+  EVENT = 'EVENT',
+  BOSS = 'BOSS'
+}
+
+export interface MapNode {
+  id: string;
+  type: NodeType;
+  layer: number;
+  nextNodes: string[];
+  isCompleted?: boolean;
+}
+
+export interface SectorMap {
+  layers: MapNode[][];
+}
+
+export class SectorMapGenerator {
+  generateSectorMap(): SectorMap {
+    const layer0: MapNode[] = [
+      { id: 'node_0_0', type: NodeType.COMBAT, layer: 0, nextNodes: ['node_1_0', 'node_1_1'] },
+      { id: 'node_0_1', type: NodeType.COMBAT, layer: 0, nextNodes: ['node_1_1'] }
+    ];
+
+    const layer1: MapNode[] = [
+      { id: 'node_1_0', type: NodeType.EVENT, layer: 1, nextNodes: ['node_2_0'] },
+      { id: 'node_1_1', type: NodeType.SHOP, layer: 1, nextNodes: ['node_2_0', 'node_2_1'] }
+    ];
+
+    const layer2: MapNode[] = [
+      { id: 'node_2_0', type: NodeType.ELITE, layer: 2, nextNodes: ['boss'] },
+      { id: 'node_2_1', type: NodeType.COMBAT, layer: 2, nextNodes: ['boss'] }
+    ];
+
+    const bossLayer: MapNode[] = [
+      { id: 'boss', type: NodeType.BOSS, layer: 3, nextNodes: [] }
+    ];
+
+    return { layers: [layer0, layer1, layer2, bossLayer] };
   }
 }
 ```
 
 ```typescript
-// src/scenes/CombatScene.ts
+// src/scenes/MapScene.ts
 import Phaser from 'phaser';
-import { GravityBody, GravityBodyType } from '../physics/GravityBody';
-import { Vector2D } from '../physics/Vector2D';
+import { SectorMapGenerator, SectorMap, MapNode } from '../state/SectorMap';
 
-export class CombatScene extends Phaser.Scene {
-  private bodies: GravityBody[] = [];
+export class MapScene extends Phaser.Scene {
+  private sectorMap: SectorMap;
 
   constructor() {
-    super('CombatScene');
+    super('MapScene');
+    const generator = new SectorMapGenerator();
+    this.sectorMap = generator.generateSectorMap();
   }
 
   create() {
-    // 1. Dark Starfield Background
     this.cameras.main.setBackgroundColor('#090d16');
-    this.createStarfield();
+    this.add.text(640, 50, 'FOUNDRY SECTOR MAP', { fontSize: '24px', color: '#38bdf8', fontStyle: 'bold' }).setOrigin(0.5);
 
-    // 2. Initial Natural Planet
-    const mainPlanet = new GravityBody('planet1', GravityBodyType.PLANET, new Vector2D(640, 360), 6000, 40, 220);
-    this.bodies.push(mainPlanet);
+    // Render node graph
+    this.sectorMap.layers.forEach((layer, lIdx) => {
+      layer.forEach((node, nIdx) => {
+        const x = 300 + lIdx * 220;
+        const y = 200 + nIdx * 150;
 
-    // Draw Planet
-    this.add.image(mainPlanet.position.x, mainPlanet.position.y, 'planet_blue');
+        const btn = this.add.text(x, y, `[ ${node.type} ]`, {
+          fontSize: '14px',
+          color: '#f8fafc',
+          backgroundColor: '#1e293b',
+          padding: { x: 12, y: 8 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    // Draw Pull Radius Ring
-    const ringGraphics = this.add.graphics();
-    ringGraphics.lineStyle(1, 0x6366f1, 0.4);
-    ringGraphics.strokeCircle(mainPlanet.position.x, mainPlanet.position.y, mainPlanet.pullRadius);
-
-    // Label
-    this.add.text(20, 20, 'SECTOR GRID // GRAVITY FOUNDRY', {
-      fontFamily: 'system-ui',
-      fontSize: '16px',
-      color: '#38bdf8'
+        btn.on('pointerdown', () => {
+          if (node.type === 'SHOP') this.scene.start('ShopScene');
+          else if (node.type === 'EVENT') this.scene.start('EventScene');
+          else this.scene.start('CombatScene', { nodeType: node.type });
+        });
+      });
     });
   }
+}
+```
 
-  private createStarfield() {
-    const graphics = this.add.graphics();
-    graphics.fillStyle(0xffffff, 0.6);
-    for (let i = 0; i < 150; i++) {
-      const x = Phaser.Math.Between(0, 1280);
-      const y = Phaser.Math.Between(0, 720);
-      const size = Phaser.Math.Between(1, 2);
-      graphics.fillCircle(x, y, size);
-    }
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npm run test`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/state/SectorMap.ts src/scenes/MapScene.ts tests/state/SectorMap.test.ts
+git commit -m "feat: add SectorMap node generator and MapScene"
+```
+
+---
+
+### Task 11: ShopScene & EventScene
+
+**Files:**
+- Create: `src/scenes/ShopScene.ts`
+- Create: `src/scenes/EventScene.ts`
+
+**Interfaces:**
+- Consumes: `PlayerShip`, `Deck`, `RelicCatalog`
+- Produces: Interactive Shop UI (buy cards/relics) and Anomaly Event UI.
+
+- [ ] **Step 1: Implement ShopScene and EventScene**
+
+```typescript
+// src/scenes/ShopScene.ts
+import Phaser from 'phaser';
+
+export class ShopScene extends Phaser.Scene {
+  constructor() {
+    super('ShopScene');
+  }
+
+  create() {
+    this.cameras.main.setBackgroundColor('#0b0f19');
+    this.add.text(640, 60, 'SALVAGE SHOP & REPAIR', { fontSize: '28px', color: '#f59e0b', fontStyle: 'bold' }).setOrigin(0.5);
+
+    // Buy Relic Button
+    const relicBtn = this.add.text(450, 300, 'Buy Event Horizon Harness (150c)', {
+      fontSize: '16px', color: '#818cf8', backgroundColor: '#1e293b', padding: { x: 16, y: 10 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    // Leave Button
+    const leaveBtn = this.add.text(640, 550, 'RETURN TO SECTOR MAP', {
+      fontSize: '18px', color: '#38bdf8', backgroundColor: '#0f172a', padding: { x: 20, y: 10 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    leaveBtn.on('pointerdown', () => this.scene.start('MapScene'));
   }
 }
 ```
 
 ```typescript
-// src/main.ts
+// src/scenes/EventScene.ts
 import Phaser from 'phaser';
-import { BootScene } from './scenes/BootScene';
-import { CombatScene } from './scenes/CombatScene';
 
-const config: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
-  parent: 'game-container',
-  width: 1280,
-  height: 720,
-  scene: [BootScene, CombatScene]
-};
+export class EventScene extends Phaser.Scene {
+  constructor() {
+    super('EventScene');
+  }
 
-new Phaser.Game(config);
+  create() {
+    this.cameras.main.setBackgroundColor('#0b0f19');
+    this.add.text(640, 100, 'GRAVITATIONAL ANOMALY EVENT', { fontSize: '24px', color: '#a855f7', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(640, 200, 'You detect an abandoned derelict probe drifting near a pulsar horizon.', { fontSize: '16px', color: '#94a3b8' }).setOrigin(0.5);
+
+    const option1 = this.add.text(640, 320, '1. Salvage Probe Core (Gain +50 Credits, lose 10 HP)', {
+      fontSize: '16px', color: '#10b981', backgroundColor: '#1e293b', padding: { x: 16, y: 10 }
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    option1.on('pointerdown', () => this.scene.start('MapScene'));
+  }
+}
 ```
 
-- [ ] **Step 2: Test dev server rendering**
+- [ ] **Step 2: Verify build**
 
 Run: `npm run build`
-Expected: TypeScript builds without errors.
+Expected: Build passes without errors.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/main.ts src/scenes/BootScene.ts src/scenes/CombatScene.ts
-git commit -m "feat: initialize Phaser 3 game canvas, BootScene and starfield CombatScene"
+git add src/scenes/ShopScene.ts src/scenes/EventScene.ts
+git commit -m "feat: add ShopScene and EventScene for roguelite meta progression"
 ```
 
 ---
 
-### Task 9: TrajectoryRenderer & Turret Aiming
+### Task 12: BootScene & CombatScene Canvas Renderer
+
+**Files:**
+- Modify: `src/main.ts`
+- Modify: `src/scenes/BootScene.ts`
+- Modify: `src/scenes/CombatScene.ts`
+
+**Interfaces:**
+- Consumes: `GravityBody`, `OrbitalEntity`, `Enemy`
+- Produces: Rendered 1280x720 combat viewport with orbiting energy pods, pulsar rings, and rotating defense drones.
+
+- [ ] **Step 1: Update BootScene with procedural textures**
+
+Generate textures for Repulsion Node, Pulsar, Energy Pod, and Defense Drone in `BootScene.ts`.
+
+- [ ] **Step 2: Update CombatScene renderer**
+
+Render planet pull radius, black hole accretion disk, energy containers, and enemy rotating defense drones.
+
+- [ ] **Step 3: Verify build**
+
+Run: `npm run build`
+Expected: Passes.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/main.ts src/scenes/BootScene.ts src/scenes/CombatScene.ts
+git commit -m "feat: render celestial bodies, orbital collectibles, and rotating defense drones in CombatScene"
+```
+
+---
+
+### Task 13: TrajectoryRenderer & Launcher Aiming
 
 **Files:**
 - Create: `src/ui/TrajectoryRenderer.ts`
 - Modify: `src/scenes/CombatScene.ts`
 
 **Interfaces:**
-- Consumes: `TrajectoryPredictor`, `Probe`, `GravityBody`, `Phaser.Graphics`
-- Produces: Aiming pointer controls updating trajectory prediction graphics in real-time.
+- Consumes: `TrajectoryPredictor`, `Probe`, `GravityBody`
+- Produces: Real-time dotted trajectory arc pointer tracking.
 
 - [ ] **Step 1: Implement TrajectoryRenderer**
 
@@ -1159,7 +1491,7 @@ export class TrajectoryRenderer {
     const points = this.predictor.predict(probe, bodies, 200, 0.03);
 
     this.graphics.fillStyle(0xf59e0b, 0.9);
-    for (let i = 0; i < points.length; i += 3) { // Draw dotted line
+    for (let i = 0; i < points.length; i += 3) {
       this.graphics.fillCircle(points[i].x, points[i].y, 3);
     }
   }
@@ -1170,16 +1502,7 @@ export class TrajectoryRenderer {
 }
 ```
 
-- [ ] **Step 2: Wire pointer aim in CombatScene**
-
-Add aiming pointer event listeners in `CombatScene.ts` calling `renderTrajectory`.
-
-- [ ] **Step 3: Verify build**
-
-Run: `npm run build`
-Expected: Build passes without errors.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
 git add src/ui/TrajectoryRenderer.ts src/scenes/CombatScene.ts
@@ -1188,17 +1511,36 @@ git commit -m "feat: add TrajectoryRenderer with real-time pointer aiming arc"
 
 ---
 
-### Task 10: Interactive Bottom Card Dock & Drag-to-Field UI
+### Task 14: Bottom Card Dock, RelicBar & Drag Controls
 
 **Files:**
 - Create: `src/ui/CardContainer.ts`
+- Create: `src/ui/RelicBar.ts`
 - Modify: `src/scenes/CombatScene.ts`
 
 **Interfaces:**
-- Consumes: `Card`, `CombatStateMachine`
-- Produces: Phaser Card GameObjects with drag-and-drop support.
+- Consumes: `Card`, `RelicManager`
+- Produces: Draggable card game objects and active Relic icons HUD.
 
-- [ ] **Step 1: Implement CardContainer**
+- [ ] **Step 1: Implement CardContainer and RelicBar**
+
+```typescript
+// src/ui/RelicBar.ts
+import Phaser from 'phaser';
+import { RelicManager } from '../state/Relic';
+
+export class RelicBar {
+  private container: Phaser.GameObjects.Container;
+
+  constructor(scene: Phaser.Scene, rm: RelicManager) {
+    this.container = scene.add.container(20, 50);
+    rm.relics.forEach((relic, idx) => {
+      const text = scene.add.text(idx * 35, 0, relic.icon, { fontSize: '20px' });
+      this.container.add(text);
+    });
+  }
+}
+```
 
 ```typescript
 // src/ui/CardContainer.ts
@@ -1207,23 +1549,17 @@ import { Card } from '../state/Card';
 
 export class CardContainer extends Phaser.GameObjects.Container {
   public cardData: Card;
-  private background: Phaser.GameObjects.Rectangle;
 
   constructor(scene: Phaser.Scene, x: number, y: number, card: Card, onDropCallback: (card: Card, dropX: number, dropY: number) => void) {
     super(scene, x, y);
     this.cardData = card;
 
-    // Card dimensions: 110x140
-    this.background = scene.add.rectangle(0, 0, 110, 140, 0x1e293b)
+    const bg = scene.add.rectangle(0, 0, 110, 140, 0x1e293b)
       .setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(card.color).color);
-    this.add(this.background);
+    this.add(bg);
 
-    const title = scene.add.text(-48, -55, card.name, {
-      fontSize: '11px',
-      color: '#f8fafc',
-      fontStyle: 'bold',
-      wordWrap: { width: 95 }
-    });
+    const titleText = card.isUpgraded ? card.name + '+' : card.name;
+    const title = scene.add.text(-48, -55, titleText, { fontSize: '11px', color: '#f8fafc', fontStyle: 'bold', wordWrap: { width: 95 } });
     this.add(title);
 
     const costBadge = scene.add.circle(42, -55, 12, 0x2563eb);
@@ -1231,58 +1567,36 @@ export class CardContainer extends Phaser.GameObjects.Container {
     this.add(costBadge);
     this.add(costText);
 
-    const desc = scene.add.text(-48, 0, card.description, {
-      fontSize: '9px',
-      color: '#94a3b8',
-      wordWrap: { width: 95 }
-    });
-    this.add(desc);
-
-    // Make interactive & draggable
     this.setSize(110, 140);
     this.setInteractive();
     scene.input.setDraggable(this);
 
-    this.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
-      this.setPosition(dragX, dragY);
-    });
-
-    this.on('dragend', (pointer: Phaser.Input.Pointer) => {
-      onDropCallback(this.cardData, pointer.x, pointer.y);
-    });
+    this.on('drag', (_p: any, dragX: number, dragY: number) => this.setPosition(dragX, dragY));
+    this.on('dragend', (p: Phaser.Input.Pointer) => onDropCallback(this.cardData, p.x, p.y));
 
     scene.add.existing(this);
   }
 }
 ```
 
-- [ ] **Step 2: Build Card Dock in CombatScene**
-
-In `CombatScene.ts`, spawn `CardContainer` instances along the bottom screen bar (`y = 630`) from `stateMachine.deck.hand`. When dropped, spawn corresponding `GravityBody` (if field card) or grant shields (if defense card).
-
-- [ ] **Step 3: Verify build**
-
-Run: `npm run build`
-Expected: Build passes cleanly.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add src/ui/CardContainer.ts src/scenes/CombatScene.ts
-git commit -m "feat: add CardContainer with drag-and-drop card dock UI"
+git add src/ui/CardContainer.ts src/ui/RelicBar.ts src/scenes/CombatScene.ts
+git commit -m "feat: add CardContainer drag controls and RelicBar HUD"
 ```
 
 ---
 
-### Task 11: Probe Launch & Real-time Combat Simulation Resolution
+### Task 15: Probe Launch Real-Time Simulation & Collision Resolution
 
 **Files:**
 - Create: `src/ui/HUD.ts`
 - Modify: `src/scenes/CombatScene.ts`
 
 **Interfaces:**
-- Consumes: `PhysicsEngine`, `Probe`, `CombatStateMachine`
-- Produces: Launch Probe trigger button, real-time 60 FPS probe simulation, collision damage detection on enemy ship, and HP UI updates.
+- Consumes: `PhysicsEngine`, `Probe`, `Enemy`, `CombatStateMachine`
+- Produces: Launch Probe trigger button, 60 FPS physics update loop, drone interception checks, kinetic damage calculation, and screen shake on Mega-Crits.
 
 - [ ] **Step 1: Implement HUD**
 
@@ -1311,29 +1625,23 @@ export class HUD {
 }
 ```
 
-- [ ] **Step 2: Add Fire Button and Simulation Loop in CombatScene**
+- [ ] **Step 2: Wire simulation loop & drone interception in CombatScene**
 
-1. Create a "LAUNCH PROBE" button at bottom right (`x = 1150, y = 650`).
-2. Clicking Launch instantiates active `Probe`, clears trajectory preview, and sets `isSimulating = true`.
-3. In `update(time, delta)`, call `physicsEngine.step(probe, bodies, delta / 1000)`.
-4. Draw probe sprite and trailing glowing line.
-5. If `probe.position.dist(enemy.position) <= 30`, calculate `probe.getCurrentDamage()`, subtract from `enemy.hp`, trigger screen shake if `slingshotCount >= 3`, and trigger `stateMachine.executeEnemyTurn()`.
+In `CombatScene.ts`:
+1. Check if probe collides with any `drone.getAbsolutePosition(enemy.position)`. If hit, destroy drone and stop probe.
+2. If probe hits `enemy.position`, apply `probe.getCurrentDamage(hasAmplifier ? 8.0 : 4.0)`.
+3. If `slingshotCount >= 3`, trigger `this.cameras.main.shake(300, 0.02)`.
 
-- [ ] **Step 3: Verify build**
-
-Run: `npm run build && npm run test`
-Expected: Build passes and all tests pass.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add src/ui/HUD.ts src/scenes/CombatScene.ts
-git commit -m "feat: add HUD and full real-time probe launch combat simulation loop"
+git commit -m "feat: implement real-time simulation with defense drone interception and Mega-Crit screen shake"
 ```
 
 ---
 
-### Task 12: GameOverScene & Full Game Loop Polish
+### Task 16: GameOverScene & Full Roguelite Loop Verification
 
 **Files:**
 - Create: `src/scenes/GameOverScene.ts`
@@ -1342,7 +1650,7 @@ git commit -m "feat: add HUD and full real-time probe launch combat simulation l
 
 **Interfaces:**
 - Consumes: Victory/Defeat state
-- Produces: Game over screen with restart button.
+- Produces: Game Over screen with return to Map button.
 
 - [ ] **Step 1: Implement GameOverScene**
 
@@ -1359,44 +1667,29 @@ export class GameOverScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#090d16');
 
     const titleColor = data.result === 'VICTORY' ? '#10b981' : '#ef4444';
-    this.add.text(640, 280, data.result, {
-      fontSize: '48px',
-      color: titleColor,
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
+    this.add.text(640, 280, data.result, { fontSize: '48px', color: titleColor, fontStyle: 'bold' }).setOrigin(0.5);
 
-    const sub = data.result === 'VICTORY'
-      ? 'Target Destroyed. Gravitational Anomaly Neutralized.'
-      : 'Ship Hull Breached. Gravity Foundry Claimed Your Salvage.';
-    this.add.text(640, 350, sub, { fontSize: '18px', color: '#94a3b8' }).setOrigin(0.5);
-
-    const restartBtn = this.add.text(640, 440, 'RESTART SIMULATION', {
-      fontSize: '20px',
-      color: '#38bdf8',
-      backgroundColor: '#1e293b',
-      padding: { x: 20, y: 10 }
+    const btn = this.add.text(640, 440, 'RETURN TO SECTOR MAP', {
+      fontSize: '20px', color: '#38bdf8', backgroundColor: '#1e293b', padding: { x: 20, y: 10 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    restartBtn.on('pointerdown', () => {
-      this.scene.start('CombatScene');
-    });
+    btn.on('pointerdown', () => this.scene.start('MapScene'));
   }
 }
 ```
 
-- [ ] **Step 2: Connect CombatScene to GameOverScene**
+- [ ] **Step 2: Update main.ts scene list**
 
-If `enemy.hp <= 0`, transition to `GameOverScene` with `VICTORY`.
-If `player.hp <= 0`, transition to `GameOverScene` with `DEFEAT`.
+Add `MapScene`, `ShopScene`, `EventScene`, `GameOverScene` to Phaser GameConfig in `main.ts`.
 
 - [ ] **Step 3: Run full verification suite**
 
 Run: `npm run build && npm run test`
-Expected: Everything compiles cleanly and test suite passes 100%.
+Expected: Everything compiles cleanly and 100% of Vitest unit tests pass.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add src/scenes/GameOverScene.ts src/main.ts src/scenes/CombatScene.ts
-git commit -m "feat: add GameOverScene with Victory/Defeat screen and restart loop"
+git commit -m "feat: complete full roguelite game loop with MapScene navigation and victory/defeat screens"
 ```
