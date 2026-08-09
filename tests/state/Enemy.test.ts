@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Enemy, DefenseDrone } from '../../src/state/Enemy';
+import { Enemy } from '../../src/state/Enemy';
 import { Deck } from '../../src/state/Deck';
 import { StarterCards } from '../../src/state/Card';
 import { Vector2D } from '../../src/physics/Vector2D';

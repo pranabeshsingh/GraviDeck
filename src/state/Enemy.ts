@@ -1,5 +1,5 @@
 import { Vector2D } from '../physics/Vector2D';
-import { StatusTracker } from './StatusEffect';
+import { StatusTracker, StatusEffectType } from './StatusEffect';
 
 export class DefenseDrone {
   constructor(
@@ -32,7 +32,7 @@ export class Enemy {
   }
 
   updateDrones(dt: number): void {
-    if (this.statusTracker.hasStatus('GRAV_LOCKED')) return;
+    if (this.statusTracker.hasStatus(StatusEffectType.GRAV_LOCKED)) return;
     for (const drone of this.drones) {
       drone.angle += drone.orbitSpeed * dt;
     }
