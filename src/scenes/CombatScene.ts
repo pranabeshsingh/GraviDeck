@@ -3,10 +3,12 @@ import { GravityBody, GravityBodyType } from '../physics/GravityBody';
 import { Vector2D } from '../physics/Vector2D';
 import { CombatStateMachine } from '../state/CombatStateMachine';
 import { StarterCards } from '../state/Card';
+import { TrajectoryRenderer } from '../ui/TrajectoryRenderer';
 
 export class CombatScene extends Phaser.Scene {
   public sm: CombatStateMachine = new CombatStateMachine(StarterCards);
   public bodies: GravityBody[] = [];
+  public trajectoryRenderer!: TrajectoryRenderer;
 
   constructor() {
     super('CombatScene');
@@ -28,6 +30,13 @@ export class CombatScene extends Phaser.Scene {
     this.add.text(20, 20, 'SECTOR GRID // GRAVITY FOUNDRY', {
       fontSize: '16px',
       color: '#38bdf8'
+    });
+
+    this.trajectoryRenderer = new TrajectoryRenderer(this);
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      const aimAngle = Math.atan2(pointer.y - this.sm.player.position.y, pointer.x - this.sm.player.position.x);
+      this.trajectoryRenderer.renderTrajectory(this.sm.player.position, aimAngle, this.sm.player.launchPower, this.bodies);
     });
   }
 
